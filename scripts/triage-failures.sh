@@ -6,7 +6,7 @@
 #
 # Usage: scripts/triage-failures.sh PR          # gather every report for the PR:
 #                                               #   the update bot's report in the PR body,
-#                                               #   ~/.cache/nixpkgs-review/pr-PR/report.md,
+#                                               #   $NIXPKGS_REVIEW_CACHE/pr-PR/report.md,
 #                                               #   and the fork's newest successful run,
 #                                               #   which is saved to reports/PR-gha.md
 #        scripts/triage-failures.sh REPORT.md   # parse one report file (assumes base = master)
@@ -26,7 +26,7 @@ elif [[ "$1" =~ ^[0-9]+$ ]]; then
   pr=$1
   pr_meta "$pr" "$tmp/body.md" || die "cannot read PR #$pr"
   extract_failures "$tmp/body.md" update-bot >> "$all"
-  f="$HOME/.cache/nixpkgs-review/pr-$pr/report.md"
+  f="$NIXPKGS_REVIEW_CACHE/pr-$pr/report.md"
   [[ -f "$f" ]] && extract_failures "$f" local >> "$all"
   f="$KIT/reports/$pr-gha.md"
   run=$(gha_report "$pr" "$f")

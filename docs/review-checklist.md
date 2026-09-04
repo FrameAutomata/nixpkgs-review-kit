@@ -70,7 +70,7 @@ After building:
 ## Testing binaries
 
 Do this on the machine, not in Actions. After `scripts/local-review.sh N`
-you are in a shell where `./results/<pkg>/bin/` holds the outputs.
+you are in a shell where `./results/<pkg>-<system>/bin/` holds the outputs.
 
 - Run the main program with `--version` and `--help`.
 - Do one real thing with it: open a file, run a trivial job, list something.
