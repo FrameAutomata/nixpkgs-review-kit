@@ -18,6 +18,8 @@ project's automation policy requires.
 |---|---|
 | `README.md` | Setup and the day-to-day workflow (this file) |
 | `docs/review-checklist.md` | What to check for package updates and new packages |
+| `docs/before-you-post.md` | What you must verify yourself vs. what you can take from the tooling |
+| `docs/verifying-findings.md` | The verification protocol: how to check a finding before writing it down |
 | `docs/nixpkgs-review-gha.md` | Reference for the Actions workflow: inputs, limits, how results are posted |
 | `docs/local-review.md` | Running nixpkgs-review on this machine |
 | `templates/review-comment.md` | Template for the review comment |
@@ -26,6 +28,10 @@ project's automation policy requires.
 | `scripts/gha-review.sh` | Start an Actions review for one or more PRs |
 | `scripts/local-review.sh` | Run nixpkgs-review locally from the nixpkgs checkout |
 | `scripts/triage-failures.sh` | Explain failed packages: still-failing marker, Hydra status, open issues |
+| `scripts/queue.sh` | Keep a batch of builds in flight and triage them as they land |
+| `scripts/notes.sh` | Write a per-PR test plan: what changed, what to watch out for, what to run |
+| `scripts/review.sh` | Pre-fill the review template with the facts; leaves every human claim blank |
+| `.claude/skills/test-package/` | Claude Code skill: the testing procedure, following `docs/verifying-findings.md` |
 | `reports/` | Scratch space for saved reports (git-ignored) |
 
 ## Prerequisites
@@ -141,7 +147,7 @@ what you do not have to.
    ```
 
    This builds the changed packages for x86_64-linux and drops you into a
-   shell where `./results/<pkg>/bin/` holds the outputs. Run the main
+   shell where `./results/<pkg>-<system>/bin/` holds the outputs. Run the main
    program, check `--version`, do a small real task with it. Exit when done.
    Details in `docs/local-review.md`.
 
@@ -159,6 +165,88 @@ what you do not have to.
    packages you maintain, by commenting `/nixpkgs-merge-bot merge`.
    Becoming a maintainer of packages you use is the one change that turns
    your reviews into merges instead of adding to the approved-but-unmerged pile.
+
+## Running the build steps as a loop
+
+`scripts/queue.sh` automates steps 1 to 4 and stops there. It keeps a few
+builds in flight, and as each report lands it either marks the PR ready or,
+when the report lists failures, runs the triage above and files the PR under
+`attention` only if a failure is one Hydra builds fine on the base branch.
+
+```bash
+scripts/queue.sh --dry-run tick   # what a tick would dispatch, without dispatching
+scripts/queue.sh run              # tick every 5 minutes until Ctrl-C
+scripts/queue.sh status           # what is waiting for you
+scripts/queue.sh add N            # queue a specific PR
+scripts/queue.sh done N           # after you have reviewed N
+```
+
+State lives in `reports/queue/`: every PR sits in one of `in-flight`, `ready`,
+`attention` or `skipped`, with the output in `reports/N-gha.md` and
+`reports/N-triage.txt`. A PR that gets merged or approved by someone else while
+its build runs is dropped on the next tick, and one whose run never produces a
+report is moved to `attention` after six hours rather than holding a slot.
+
+When a build lands, the queue announces it and writes a test plan to
+`reports/N-notes.md` with `scripts/notes.sh`:
+
+```
+  ┌─ #559879 ready to test
+  │  thonny: 4.1.7 -> 5.0.0, modernize
+  │  7 things to watch out for · reports/559879-notes.md
+  │  scripts/local-review.sh 559879
+  └─
+```
+
+The banner prints in the terminal running the loop and rings the bell.
+`notify-send` is used for a desktop notification when it is installed
+(`nix-shell -p libnotify`, or add `libnotify` to your packages); `--notify CMD`
+replaces both with a command of your own, called as
+`CMD PR BUCKET TITLE NOTES-PATH COUNT`.
+
+The notes are mechanical, not a judgement. `notes.sh` reverses the PR's diff to
+recover the base version of the package file, compares the two, and reports what
+moved: version, hashes, `dependencies`, `build-system`, `pythonRelaxDeps`,
+`patches`, `meta`. It then fires the rules that apply — a major version bump, a
+relaxed constraint added or dropped, a patch with no provenance, `doCheck =
+false`, a GUI that needs a display, `passthru.tests` worth running — and ends
+with the commands to run against `./results/<attr>-<system>/bin/`.
+
+For Python packages it also compares the runtime dependencies upstream declares
+at the new tag (`pyproject.toml`, `requirements.txt`) against the ones nixpkgs
+declares, and lists any that are missing. This is the class of problem a green
+build cannot find: a missing runtime dependency builds fine, passes
+`pythonImportsCheck`, and fails later in whichever feature imports it. Names
+differ between PyPI and nixpkgs, so confirm before reporting one.
+
+What is left over is the part that needs you: read the diff, test the binaries
+(step 5), write and post the review (step 6). The queue posts nothing and
+inherits `on-success=nothing` from `gha-review.sh`.
+
+## Disk usage
+
+Reviewing does not install anything. `nixpkgs-review` builds into `/nix/store`
+like any other Nix build, and nothing in this kit creates a GC root, so every
+package built for a review is already garbage once the review shell exits.
+Confirm on your own machine:
+
+```bash
+ls -l /nix/var/nix/gcroots/auto/ | grep nixpkgs-review   # expect no output
+```
+
+`nix shell` and `nix run` would not change that. They write the same store
+paths; the difference is only that they leave no result symlink behind, and
+there is no result symlink here to begin with. Nothing needs uninstalling
+either way: the space comes back through garbage collection.
+
+What does accumulate is nixpkgs-review's per-PR working copy under
+`~/.cache/nixpkgs-review/pr-N` — a nixpkgs checkout, a few hundred MB each.
+`scripts/queue.sh done N` deletes it; pass `--keep-cache` to keep it.
+
+For the store, run `nix-collect-garbage` when you want the space back. On NixOS
+`nix.gc.automatic` does it on a timer, and `nix.settings.min-free` with
+`max-free` collects automatically whenever free space drops below a threshold,
+which is the setting to use if you would rather never think about it.
 
 ## Rules
 

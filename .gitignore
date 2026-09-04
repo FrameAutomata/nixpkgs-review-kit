@@ -1,2 +1,3 @@
 reports/
 *.log
+.claude/settings.local.json

@@ -21,7 +21,7 @@ nixpkgs-review pr N
 
 Inside the review shell:
 
-- `./results/<pkg>/bin/` holds the built outputs.
+- `./results/<pkg>-<system>/bin/` holds the built outputs.
 - `nixpkgs-review post-result` posts the report under your own account.
 - `nixpkgs-review approve` approves the PR. Only after the checklist is done.
 - `exit` leaves the shell; the worktree is removed automatically.
