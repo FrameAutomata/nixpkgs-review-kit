@@ -12,7 +12,7 @@
 
 ##### Tested
 
-<!-- exact commands you ran against ./results/<pkg>/bin, and what happened -->
+<!-- exact commands you ran against ./results/<pkg>-<system>/bin, and what happened -->
 
 ##### Possible improvements
 
