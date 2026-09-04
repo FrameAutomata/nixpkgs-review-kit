@@ -80,6 +80,9 @@ done
 systems=linux; $darwin && systems=linux+darwin
 # Remember the newest existing run for the watched PR so the new one can be told apart.
 before=""
+# --watch polls for a run that does not exist yet; a cached listing would never
+# show it, so this whole script bypasses the cache.
+export RUNS_CACHE_TTL=0
 if $watch && ! $dry; then before=$(run_for_pr "${go[0]}" || true); fi
 
 echo "dispatch:"
